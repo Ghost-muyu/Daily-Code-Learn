@@ -1,0 +1,9 @@
+.env
+__pycache__/
+data/
+workspace/
+uploads/
+*.pyc
+*.exe
+*.zip
+.DS_Store

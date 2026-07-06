@@ -1,0 +1,96 @@
+# SJTUClaw 任务理解与大纲
+
+## 项目定位
+SJTUClaw 是一个**面向教学的最小 AI Agent Runtime**，灵感来源于 OpenClaw 等个人 AI 助手项目。目标是从最基础的 LLM API 调用开始，渐进式地实现一个完整的 Agent 系统，在此过程中学习 AI Agent 的组成原理并练习 vibe coding 技巧。
+
+推荐语言：**Python**，工程结构清晰、模块边界明确。
+
+---
+
+## 核心功能要求（11项）
+
+1. **基础 LLM 调用** — .env 配置、messages 结构、错误处理
+2. **CLI 多轮对话** — 终端持续对话、历史上下文维护
+3. **多 Session 管理** — 创建/列出/切换 session，持久化到本地 JSON
+4. **上下文管理** — system prompt + soul + memory + session history 四层上下文
+5. **长对话压缩 (Compaction)** — 旧消息压缩为 summary，保留最近几轮原文
+6. **工具调用 (Tool Calling)** — 模型请求 tool → runtime 执行 → 结果反馈回对话
+7. **Gateway 与图形化入口** — 非 CLI 入口（网页/桌宠/机器人等）
+8. **定时任务 (Scheduler)** — 一次性/周期性任务，到期触发 agent loop
+9. **Workspace + Advanced Tool + Approval** — 写文件/执行命令需审批
+10. **Skill System** — 扫描 skills/ 目录，加载 SKILL.md，至少3个skill（含 course-report）
+11. **统一 Runtime** — 所有入口复用同一套 session store、context builder、tool registry、agent loop
+
+---
+
+## 分步实现计划
+
+### Step 0：环境准备与 LLM API 接入
+- 搭建开发环境（WSL/macOS/Windows）
+- 创建基础工程结构：入口 / 配置 / API调用 / 数据目录
+- .env 管理 API KEY，.env.example 说明配置项，.gitignore 排除敏感文件
+- 实现最小 LLM 调用：构造 messages → 调用 API → 打印 assistant 回复
+- 错误处理：KEY缺失、网络失败、HTTP异常、响应格式异常
+
+### Step 1：CLI 多轮对话 Loop
+- 持续运行的 CLI 对话程序
+- 内存中维护当前 session 的 messages 历史
+- 每轮将完整历史 + 新输入发送给 LLM
+- 将 assistant 回复追加回历史
+- 核心对话逻辑与 CLI 输入输出分离
+- 支持 `/exit` 退出命令
+
+### Step 2：多 Session 管理与持久化
+- Session 数据结构：sessionId, title, messages, createdAt, updatedAt
+- Session 持久化到本地 JSON 文件，重启可恢复
+- 命令（由CLI处理，不发给LLM）：
+  - `/session new` — 创建并切换
+  - `/session list` — 列出所有
+  - `/session switch <id>` — 切换
+  - `/session rename <id> <title>` — 重命名
+  - `/session delete <id>` — 删除
+- 引入 **Context Builder** 模块：将存储结构转换为 LLM 输入
+
+### Step 3：System Prompt、Memory 与 Soul
+- **System Prompt**：系统规则和行为边界，从配置文件加载
+- **Soul**：Agent 的稳定身份和交互风格，从配置文件加载
+- **Memory**：跨 session 的长期用户偏好/事实，手动管理
+  - `/memory add <content>` / `/memory list` / `/memory delete <id>`
+- 稳定上下文 vs 对话上下文的明确边界
+- Context Builder 组装：system prompt → soul → memory → session messages
+
+### Step 4：上下文压缩 (Compaction)
+- 为每个 session 增加 summary 字段
+- 触发策略：字符数/消息数超过阈值时自动压缩
+- 压缩流程：已有 summary + 旧 messages → LLM → 新 summary
+- 保留最近 N 轮原始 messages，旧消息合并为 summary
+- 失败保护：**compaction 失败时绝不删除旧 messages**
+- 手动命令：`/compact`
+- 不压缩 system prompt、soul、memory（稳定上下文）
+
+### Step 5：只读 Tool 与 Agent Loop
+- 统一 Tool 数据结构（name, description, parameters, handler）
+- Tool Registry：注册、查找、执行
+- 至少3个只读 tool：获取当前时间、列出目录、读取文本文件
+- Agent Loop 升级：用户输入 → LLM → (tool_call?) → 执行 tool → 结果回写 → LLM → 最终回复
+- Tool 调用 trace 记录
+
+### Step 6+（文档后续部分）
+- Gateway 与图形化入口（网页/机器人等）
+- 定时任务 Scheduler
+- Workspace + Advanced Tool + Approval 流程
+
+
+- Skill System 实现
+- 统一 Runtime 整合
+
+---
+我是雾霜雨
+
+
+## 关键设计原则
+- **存储结构 ≠ 模型输入结构**：Context Builder 负责转换
+- **稳定上下文 ≠ 对话上下文**：前者不被压缩、不被普通对话覆盖
+- **内部命令 ≠ LLM 消息**：`/session`、`/memory`、`/compact` 等由 runtime 直接处理
+- **安全第一**：API KEY 不进仓库、写操作需 approval、compaction 失败不丢数据
+- **统一 Runtime**：所有入口共用同一套核心模块
